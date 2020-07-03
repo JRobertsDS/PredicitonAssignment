@@ -1,0 +1,104 @@
+---
+title: "Prediction Assignment"
+author: "JRobertsDS"
+date: "7/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library (caret)
+library (dplyr)
+library (RANN)
+```
+
+# Executive Summary
+
+This document is available via html here: https://rpubs.com/JRobertsDS/Prediction
+
+For this project, we were supplied measurements from subjects while they were doing exercises, classified into five categories depending on the manner in which the subjects were performing the exercises. Our goal was to predict which categories were most likely to apply to 20 new sets of measurements, which were also supplied.
+
+Steps taken:
+
+- Set up for reproducibility
+- Load the data
+- Exploratory Analysis
+- Clean the data by reducing redundant and extraneous data
+    Normalize, scale, remove near zero variance data, and impute missing values with K nearest neighbors
+- Compute a Random Forest prediction algorithm via the Caret package in R, given the training data supplied
+- Explore the Random Forest 
+- Conclusion: predict values for the testing data supplied
+
+Random Forest models do not require cross validation because there is randomness built into the forest.
+The model predicts out of sample error to be less than 1%, and we verified this via subsetting the training set, making smaller models, and computing their accuracy via other subsets of the training data (not shown). The final model uses the entire training data set.
+
+# Set up for reproducibility
+```{r} 
+set.seed (1234)
+```
+
+# Load Data
+```{r loadData}
+#download.file ("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", "pml-training.csv", method = "curl")
+#download.file ("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", "pml-testing.csv", method = "curl")
+rawTraining <- read.csv ("pml-training.csv")
+rawTesting <- read.csv ("pml-testing.csv")
+```
+
+```{r subsetSamples, echo = FALSE}
+#sampledTraining <- sample_n (rawTraining, 1000); # jimbo NOT FOR PRODUCTION
+#sampledTesting <- sample_n (rawTraining, 10000); # jimbo NOT FOR PRODUCTION
+```
+# Exploratory Analysis
+```{r exploratoryAnalysis}
+str (rawTraining[, 1:10])
+
+head (names (rawTraining), 40)
+hist (as.numeric (rawTraining$classe))
+
+```
+
+# Clean Data
+```{r cleanData, cache = TRUE}
+colsToRemove <- c("avg", "stddev", "max", "min", "var", "raw", "user", "X", "time", "kurtosis", "skewness", "amplitude_yaw")
+training <- select (rawTraining, -contains (colsToRemove))
+testing <- select (rawTesting, -contains (colsToRemove))
+preTrain <- preProcess (training, method = c("center", "scale", "nzv", "knnImpute"))
+trainData <- predict (preTrain, training)
+testData <- predict (preTrain, testing)
+```
+
+# Compute Random Forest
+```{r randomForest}
+forestFit <- readRDS ("forestFit.RDS") # read manually cached results, so they don't have to be re-computed each Knit
+#forestFit <- train (classe ~ ., method = "rf", verbose = FALSE, data = trainData, na.action = na.omit)
+#   saveRDS (forestFit, file="forestFit.RDS")
+```
+
+# Explore the Random Forest
+```{r plots}
+preTrain
+#forestFit$finalModel
+
+# In band accuracy
+forestTrainPredictions <- predict (forestFit, trainData)
+forestTrainAccuracy <- (sum (trainData$classe == forestTrainPredictions)) / length (forestTrainPredictions)
+forestTrainAccuracy
+
+# Variable Importance
+forestImp <- varImp (forestFit)
+plot (forestImp)
+```
+
+# Conclusion
+
+These are the predictions generated on the test data:
+
+```{r conclusion}
+# forestTestPredictions   [1] B A B A A E D B A A B C B A E E A B B B
+forestTestPredictions <- predict (forestFit, testData) 
+forestTestPredictions 
+
+```
+
+Data source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
